@@ -29,7 +29,7 @@ CHANNEL_USERNAME = os.getenv("CHANNEL_USERNAME")
 PROMO_CODE = os.getenv("PROMO_CODE", "CXEMA4MINES")
 TELEGRAPH_URL = os.getenv("TELEGRAPH_URL", "https://telegra.ph/Kak-vyjti-iz-starogo-akkaunta-11-11-2")
 
-OWNER_ID = 1253708269  # ✅ твой Telegram ID
+OWNER_ID = int(os.getenv("OWNER_ID", "1253708269"))
 
 if not BOT_TOKEN:
     logger.error("❌ BOT_TOKEN не найден! Проверь переменные окружения на Railway или .env файл.")
