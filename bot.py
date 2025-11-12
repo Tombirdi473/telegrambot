@@ -186,7 +186,10 @@ async def handle_registration(query, user_id, context):
         ]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
+try:
     msg = await query.edit_message_text(text, reply_markup=reply_markup, parse_mode="HTML")
+except Exception:
+    msg = await context.bot.send_message(chat_id=query.message.chat_id, text=text, reply_markup=reply_markup, parse_mode="HTML")
     track_message(user_id, msg.message_id)
 
 
