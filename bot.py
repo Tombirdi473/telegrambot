@@ -45,7 +45,6 @@ verification_state = {}  # {user_id: 'waiting_screenshot' | 'waiting_id' | None}
 # === Вспомогательные функции ===
 def track_message(user_id, message_id):
 @@ -82,7 +82,6 @@
-    ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     # Проверяем: это владелец?
@@ -380,4 +379,5 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 if __name__ == "__main__":
     main()
+
     main()
