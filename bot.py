@@ -120,7 +120,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         'subscribed': False,
         'signal_count': 0,
         'deposit_made': False,
-        'last_signal_time': None
+        'last_signal_time': None,
         'last_signal_time': None,
         'verification_approved': False  # НОВОЕ
     })
@@ -574,3 +574,4 @@ def main():
 if __name__ == "__main__":
     main()
     main()
+
