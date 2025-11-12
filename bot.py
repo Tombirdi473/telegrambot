@@ -11,9 +11,6 @@ from datetime import datetime
 import os
 from dotenv import load_dotenv
 
-# === Загрузка .env ===
-load_dotenv()
-
 # === Настройка логов ===
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
