@@ -35,8 +35,9 @@ except (TypeError, ValueError):
 
 if not BOT_TOKEN:
     logger.error("❌ BOT_TOKEN не найден! Проверь переменные окружения на Railway или .env файл.")
+    raise ValueError("❌ BOT_TOKEN не найден!")
 
-# === Хранилища данных ===
+# === Хранилища ===
 user_data = {}
 user_messages = {}
 broadcast_mode = {}
@@ -50,26 +51,36 @@ def track_message(user_id, message_id):
         user_messages[user_id] = []
     user_messages[user_id].append(message_id)
 
+
 async def delete_all_messages(chat_id, user_id, bot):
-    if user_id in user_messages:
-        for msg_id in user_messages[user_id]:
+    if user_id in user_messages and user_messages[user_id]:
+        while user_messages[user_id]:
+            message_id = user_messages[user_id].pop()
             try:
-                await bot.delete_message(chat_id=chat_id, message_id=msg_id)
+                await bot.delete_message(chat_id=chat_id, message_id=message_id)
             except Exception:
                 pass
-        user_messages[user_id] = []
+
 
 # === Главное меню ===
 async def show_main_menu(chat_id, user_id, bot):
     await delete_all_messages(chat_id, user_id, bot)
+
     text = (
-        "🎰 <b>Добро пожаловать в бот!</b>\n\n"
-        "Выберите действие:"
+        "🪜 <b>Шаг 1 — Зарегистрируйся</b>\n\n"
+        "Для синхронизации с ботом вам необходимо создать новый аккаунт строго по ссылке из бота и применить промокод:\n\n"
+        f"🎁 <b>Промокод: 👉 {PROMO_CODE} 👈</b>\n\n"
+        "Если вы открыли ссылку и попали в старый аккаунт, то вам нужно:\n"
+        "🔹 Выйти из старого аккаунта\n"
+        "🔹 Закрыть сайт\n"
+        "🔹 Снова открыть сайт через кнопку в боте\n"
+        "🔹 Пройти регистрацию с указанием промокода 💎"
     )
+
     keyboard = [
         [InlineKeyboardButton("📝 Регистрация", callback_data='register')],
-        [InlineKeyboardButton("🎯 Получить сигналы", callback_data='get_signals')],
-        [InlineKeyboardButton("📖 Инструкция по выходу из старого аккаунта", callback_data='exit_instruction')]
+        [InlineKeyboardButton("📖 Инструкция выхода", callback_data='exit_instruction')],
+        [InlineKeyboardButton("❓ Помощь", url=f"https://t.me/{HELP_CONTACT}")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
@@ -79,14 +90,15 @@ async def show_main_menu(chat_id, user_id, bot):
             [[KeyboardButton("📢 Сделать рассылку")]],
             resize_keyboard=True
         )
+        text += "\n\n👑 <b>Вы вошли как владелец.</b>"
     else:
         reply_keyboard = ReplyKeyboardRemove()
 
     message = await bot.send_message(
         chat_id=chat_id,
         text=text,
-        reply_markup=reply_markup,
-        parse_mode="HTML"
+        parse_mode="HTML",
+        reply_markup=reply_markup
     )
     track_message(user_id, message.message_id)
 
@@ -94,10 +106,11 @@ async def show_main_menu(chat_id, user_id, bot):
     if user_id == OWNER_ID and user_id not in panel_shown:
         await bot.send_message(
             chat_id=chat_id,
-            text="✅ Панель владельца активирована",
+            text="💬 Панель активна (для владельца)",
             reply_markup=reply_keyboard
         )
         panel_shown.add(user_id)
+
 
 # === Команда /start ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -107,40 +120,41 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         'subscribed': False,
         'signal_count': 0,
         'deposit_made': False,
+        'last_signal_time': None
         'last_signal_time': None,
         'verification_approved': False  # НОВОЕ
     })
     user_messages.setdefault(user_id, [])
     await show_main_menu(update.effective_chat.id, user_id, context.bot)
 
-# === Обработка кнопок ===
+
+# === Обработка нажатий ===
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer()
+
+    try:
+        await query.answer()
+    except Exception:
+        return
+
     user_id = query.from_user.id
 
-    user_data.setdefault(user_id, {
-        'registered': False,
-        'subscribed': False,
-        'signal_count': 0,
-        'deposit_made': False,
-        'last_signal_time': None
-    })
-
     if query.data == 'register':
-        await show_registration(query, user_id, context)
+        await handle_registration(query, user_id, context)
     elif query.data == 'registered':
         await handle_registered(query, user_id, context)
-    elif query.data == 'get_signals':
+    elif query.data == 'exit_instruction':
+        await show_exit_instruction(query, user_id, context)
+    elif query.data == 'subscribed':
         await send_signal_1(query, user_id, context)
     elif query.data == 'signal1_success':
+        await show_deposit_request(query, user_id, context)
+    elif query.data == 'deposit_ready':
         await send_signal_2(query, user_id, context)
     elif query.data == 'signal2_next':
         await send_signal_3(query, user_id, context)
     elif query.data == 'new_signals':
         await show_timer_and_reset(query, user_id, context)
-    elif query.data == 'exit_instruction':
-        await show_exit_instruction(query, user_id, context)
     elif query.data == 'back_to_start':
         await show_main_menu(query.message.chat_id, user_id, context.bot)
     # НОВЫЕ обработчики для верификации
@@ -151,19 +165,20 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # === Регистрация ===
-async def show_registration(query, user_id, context):
+async def handle_registration(query, user_id, context):
     text = (
-        f"📝 <b>Инструкция по регистрации</b>\n\n"
-        f"1️⃣ Перейдите по <a href='{REGISTRATION_URL}'>ссылке для регистрации</a>\n"
-        f"2️⃣ Зарегистрируйтесь на сайте\n"
-        f"3️⃣ Используйте промокод: <code>{PROMO_CODE}</code>\n"
-        f"4️⃣ После регистрации нажмите кнопку ниже 👇"
+        f"🌐 Перейдите по ссылке для регистрации и используйте промокод:\n\n"
+        f"🎁 <b>{PROMO_CODE}</b>"
     )
     keyboard = [
-        [InlineKeyboardButton("✅ Я зарегистрировался", callback_data='registered')],
-        [InlineKeyboardButton("⬅️ Назад", callback_data='back_to_start')]
+        [InlineKeyboardButton("🔗 Перейти к регистрации", url=REGISTRATION_URL)],
+        [
+            InlineKeyboardButton("✅ Зарегистрировался", callback_data='registered'),
+            InlineKeyboardButton("⬅️ Назад", callback_data='back_to_start')
+        ]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
+
     try:
         msg = await query.edit_message_text(text, reply_markup=reply_markup, parse_mode="HTML")
     except Exception:
@@ -176,6 +191,7 @@ async def show_registration(query, user_id, context):
     track_message(user_id, msg.message_id)
 
 
+# === После регистрации ===
 # === НОВОЕ: После нажатия "Зарегистрировался" - запрос верификации ===
 async def handle_registered(query, user_id, context):
     # Проверяем, прошёл ли пользователь верификацию
@@ -213,13 +229,15 @@ async def proceed_after_verification(query, user_id, context):
     user_data[user_id]['registered'] = True
     text = (
         "✅ <b>Ваш аккаунт успешно синхронизирован с ботом!</b>\n\n"
-        "Теперь вы можете получать сигналы для игры."
+        "Для получения первого сигнала подпишитесь на наш Telegram-канал 👇"
     )
     keyboard = [
-        [InlineKeyboardButton("🎯 Получить сигналы", callback_data='get_signals')],
+        [InlineKeyboardButton("📢 Подписаться на канал", url=f"https://t.me/{CHANNEL_USERNAME}")],
+        [InlineKeyboardButton("✅ Подписался", callback_data='subscribed')],
         [InlineKeyboardButton("⬅️ Назад", callback_data='back_to_start')]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
+
     try:
         msg = await query.edit_message_text(text, reply_markup=reply_markup, parse_mode="HTML")
     except Exception:
@@ -329,7 +347,7 @@ async def approve_user(query, context):
         chat_id=user_id,
         text=(
             "✅ <b>Ваша заявка одобрена!</b>\n\n"
-            "Для того чтобы продолжить работу с ботом напишите /start и пройдите процедуру вновь."
+            "Для получения сигналов напишите /start и повторите цикл."
         ),
         parse_mode="HTML"
     )
@@ -364,17 +382,18 @@ async def reject_user(query, context):
 async def show_exit_instruction(query, user_id, context):
     text = "📖 Нажмите кнопку ниже, чтобы открыть инструкцию и затем вернитесь назад 👇"
     keyboard = [
-        [InlineKeyboardButton("📄 Открыть инструкцию", url=TELEGRAPH_URL)],
+        [InlineKeyboardButton("📘 Открыть инструкцию", url=TELEGRAPH_URL)],
         [InlineKeyboardButton("⬅️ Назад", callback_data='back_to_start')]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     try:
         msg = await query.edit_message_text(text, reply_markup=reply_markup)
     except Exception:
-        msg = await context.bot.send_message(query.message.chat_id, text, reply_markup=reply_markup)
+        msg = await context.bot.send_message(chat_id=query.message.chat_id, text=text, reply_markup=reply_markup)
     track_message(user_id, msg.message_id)
 
 
+# === Сигналы ===
 # === Сигналы (требуют верификации) ===
 async def send_signal_1(query, user_id, context):
     # НОВОЕ: Проверяем верификацию
@@ -385,22 +404,45 @@ async def send_signal_1(query, user_id, context):
     await delete_all_messages(query.message.chat_id, user_id, context.bot)
     photo_path = os.path.join(os.getcwd(), "signal1.png")
     text = (
-        "🎯 <b>Сигнал №1</b>\n\n"
-        "Ставка: 💰 <b>10₽</b>\n"
-        "Мины: ⛏ <b>3 мины</b>\n\n"
-        "⏳ Сигнал активен 3 минуты\n"
-        "📍 Открывайте плитки по порядку как на картинке"
+        "✅ Отлично! Вот ваш первый сигнал 1W MINES!\n\n"
+        "💣 КОЛ-ВО МИН: 2\n\n"
+        "🚨 СХЕМА ОТ ИИ:\n"
+        "• Минимальная ставка — 11 игр на проигрыш\n"
+        "• Увеличьте ставку ×2 и возьмите минимальный выигрыш\n"
+        "• Потом поставьте 1000₽ и закройте поля строго по схеме ниже 💥"
     )
     keyboard = [[InlineKeyboardButton("✅ Сигнал сработал, перейти ко 2", callback_data='signal1_success')]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     with open(photo_path, "rb") as photo:
         msg = await context.bot.send_photo(
+    
+    if os.path.exists(photo_path):
+        with open(photo_path, "rb") as photo:
+            msg = await context.bot.send_photo(
+                chat_id=query.message.chat_id,
+                photo=photo,
+                caption=text,
+                parse_mode="HTML",
+                reply_markup=reply_markup
+            )
+    else:
+        msg = await context.bot.send_message(
             chat_id=query.message.chat_id,
             photo=photo,
             caption=text,
+            text=text,
             parse_mode="HTML",
             reply_markup=reply_markup
         )
+    track_message(user_id, msg.message_id)
+
+
+async def show_deposit_request(query, user_id, context):
+    await delete_all_messages(query.message.chat_id, user_id, context.bot)
+    text = "💰 Для получения второго сигнала сделайте депозит от 2000₽ 💵"
+    keyboard = [[InlineKeyboardButton("✅ Готово", callback_data='deposit_ready')]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    msg = await query.message.reply_text(text, reply_markup=reply_markup)
     track_message(user_id, msg.message_id)
 
 
@@ -408,19 +450,33 @@ async def send_signal_2(query, user_id, context):
     await delete_all_messages(query.message.chat_id, user_id, context.bot)
     photo_path = os.path.join(os.getcwd(), "signal2.png")
     text = (
-        "🎯 <b>Сигнал №2</b>\n\n"
-        "Ставка: 💰 <b>20₽</b>\n"
-        "Мины: ⛏ <b>3 мины</b>\n\n"
-        "⏳ Сигнал активен 3 минуты\n"
-        "📍 Открывайте плитки по порядку как на картинке"
+        "2️⃣ <b>2-ой сигнал успешно получен!</b>\n\n"
+        "💣 КОЛ-ВО МИН: 2\n\n"
+        "🚨 <b>СХЕМА/СТРАТЕГИЯ ОТ ИИ:</b>\n\n"
+        "1️⃣ Сыграйте на минимальный выигрыш 3 раза подряд.\n"
+        "2️⃣ Утройте минимальную ставку и сыграйте на поражение.\n"
+        "3️⃣ Поставьте максимальную ставку от 1000₽ и закройте поля СТРОГО как на экране 🎯"
     )
     keyboard = [[InlineKeyboardButton("➡️ Перейти к 3 сигналу", callback_data='signal2_next')]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     with open(photo_path, "rb") as photo:
         msg = await context.bot.send_photo(
+    
+    if os.path.exists(photo_path):
+        with open(photo_path, "rb") as photo:
+            msg = await context.bot.send_photo(
+                chat_id=query.message.chat_id,
+                photo=photo,
+                caption=text,
+                parse_mode="HTML",
+                reply_markup=reply_markup
+            )
+    else:
+        msg = await context.bot.send_message(
             chat_id=query.message.chat_id,
             photo=photo,
             caption=text,
+            text=text,
             parse_mode="HTML",
             reply_markup=reply_markup
         )
@@ -431,30 +487,42 @@ async def send_signal_3(query, user_id, context):
     await delete_all_messages(query.message.chat_id, user_id, context.bot)
     photo_path = os.path.join(os.getcwd(), "signal3.png")
     text = (
-        "🎯 <b>Сигнал №3 (ФИНАЛЬНЫЙ)</b>\n\n"
-        "Ставка: 💰 <b>50₽</b>\n"
-        "Мины: ⛏ <b>3 мины</b>\n\n"
-        "⏳ Сигнал активен 3 минуты\n"
-        "📍 Открывайте плитки по порядку как на картинке"
+        "3️⃣ <b>ТРЕТИЙ СИГНАЛ</b>\n\n"
+        "💣 КОЛ-ВО МИН: 2\n\n"
+        "🚨 <b>СХЕМА/СТРАТЕГИЯ ОТ ИИ:</b>\n\n"
+        "1️⃣ Перезагрузите игру (нажмите выйти и зайдите снова)\n"
+        "2️⃣ Поставьте максимальную ставку от 1000₽ и закройте поля СТРОГО как показано на экране 💎"
     )
     keyboard = [[InlineKeyboardButton("🔄 Получить новые сигналы", callback_data='new_signals')]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     with open(photo_path, "rb") as photo:
         msg = await context.bot.send_photo(
+    
+    if os.path.exists(photo_path):
+        with open(photo_path, "rb") as photo:
+            msg = await context.bot.send_photo(
+                chat_id=query.message.chat_id,
+                photo=photo,
+                caption=text,
+                parse_mode="HTML",
+                reply_markup=reply_markup
+            )
+    else:
+        msg = await context.bot.send_message(
             chat_id=query.message.chat_id,
             photo=photo,
             caption=text,
+            text=text,
             parse_mode="HTML",
             reply_markup=reply_markup
         )
     track_message(user_id, msg.message_id)
+    user_data[user_id]['last_signal_time'] = datetime.now()
 
 
 async def show_timer_and_reset(query, user_id, context):
-    text = "⏳ Новые сигналы будут доступны через 30 минут."
-    keyboard = [[InlineKeyboardButton("⬅️ Вернуться в меню", callback_data='back_to_start')]]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await query.edit_message_text(text, reply_markup=reply_markup)
+    await delete_all_messages(query.message.chat_id, user_id, context.bot)
+    await query.message.reply_text("⏰ Новые сигналы будут доступны через 24 часа.")
 
 
 # === Рассылка ===
@@ -468,23 +536,21 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if user_id == OWNER_ID and broadcast_mode.get(user_id):
+        msg = update.message
         count = 0
-        msg = await update.message.reply_text("⏳ Рассылка началась...")
-        
         for uid in user_data.keys():
-            if uid != OWNER_ID:
-                try:
-                    if update.message.photo:
-                        await context.bot.send_photo(
-                            chat_id=uid,
-                            photo=update.message.photo[-1].file_id,
-                            caption=update.message.caption
-                        )
-                    else:
-                        await context.bot.send_message(chat_id=uid, text=update.message.text)
-                    count += 1
-                except Exception:
-                    pass
+            try:
+                if msg.photo:
+                    await context.bot.send_photo(
+                        chat_id=uid,
+                        photo=msg.photo[-1].file_id,
+                        caption=msg.caption or ""
+                    )
+                else:
+                    await context.bot.send_message(uid, msg.text or "")
+                count += 1
+            except Exception as e:
+                logger.warning(f"Не удалось отправить сообщение {uid}: {e}")
 
         await msg.reply_text(f"✅ Рассылка завершена. Отправлено {count} пользователям.")
         broadcast_mode[user_id] = False
@@ -506,4 +572,5 @@ def main():
 
 
 if __name__ == "__main__":
+    main()
     main()
