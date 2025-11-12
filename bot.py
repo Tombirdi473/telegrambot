@@ -31,8 +31,7 @@ try:
     OWNER_ID = int(os.getenv("OWNER_ID"))
 except (TypeError, ValueError):
     raise ValueError("❌ OWNER_ID не найден или неверный формат. Укажи число в Railway Variables.")
-
-print(f"OWNER_ID = {OWNER_ID}")
+    print(f"OWNER_ID = {OWNER_ID}")
 
 if not BOT_TOKEN:
     logger.error("❌ BOT_TOKEN не найден! Проверь переменные окружения на Railway или .env файл.")
@@ -140,15 +139,16 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await send_signal_3(query, user_id, context)
     elif query.data == 'new_signals':
         await show_timer_and_reset(query, user_id, context)
-    elif query.data == 'back_to_start':
-        await show_main_menu(query.message.chat_id, user_id, context.bot)
     elif query.data == 'exit_instruction':
         await show_exit_instruction(query, user_id, context)
+    elif query.data == 'back_to_start':
+        await show_main_menu(query.message.chat_id, user_id, context.bot)
     # НОВЫЕ обработчики для верификации
     elif query.data.startswith('approve_'):
         await approve_user(query, context)
     elif query.data.startswith('reject_'):
         await reject_user(query, context)
+
 
 # === Регистрация ===
 async def show_registration(query, user_id, context):
@@ -174,6 +174,7 @@ async def show_registration(query, user_id, context):
             parse_mode="HTML"
         )
     track_message(user_id, msg.message_id)
+
 
 # === НОВОЕ: После нажатия "Зарегистрировался" - запрос верификации ===
 async def handle_registered(query, user_id, context):
@@ -206,6 +207,7 @@ async def handle_registered(query, user_id, context):
     # Если уже верифицирован - продолжаем
     await proceed_after_verification(query, user_id, context)
 
+
 # === НОВОЕ: Продолжение после верификации ===
 async def proceed_after_verification(query, user_id, context):
     user_data[user_id]['registered'] = True
@@ -228,6 +230,7 @@ async def proceed_after_verification(query, user_id, context):
             parse_mode="HTML"
         )
     track_message(user_id, msg.message_id)
+
 
 # === НОВОЕ: Обработка фото и текста для верификации ===
 async def handle_verification_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -275,6 +278,7 @@ async def handle_verification_media(update: Update, context: ContextTypes.DEFAUL
                 "❌ Пожалуйста, отправьте только цифры (ваш ID)."
             )
 
+
 # === НОВОЕ: Отправка владельцу для проверки ===
 async def send_verification_to_owner(update: Update, context: ContextTypes.DEFAULT_TYPE, user_id: int):
     photo_id = user_data[user_id].get('verification_photo')
@@ -306,6 +310,7 @@ async def send_verification_to_owner(update: Update, context: ContextTypes.DEFAU
         reply_markup=reply_markup
     )
 
+
 # === НОВОЕ: Одобрение заявки ===
 async def approve_user(query, context):
     user_id = int(query.data.split('_')[1])
@@ -328,6 +333,7 @@ async def approve_user(query, context):
         ),
         parse_mode="HTML"
     )
+
 
 # === НОВОЕ: Отклонение заявки ===
 async def reject_user(query, context):
@@ -353,6 +359,7 @@ async def reject_user(query, context):
         parse_mode="HTML"
     )
 
+
 # === Инструкция ===
 async def show_exit_instruction(query, user_id, context):
     text = "📖 Нажмите кнопку ниже, чтобы открыть инструкцию и затем вернитесь назад 👇"
@@ -366,6 +373,7 @@ async def show_exit_instruction(query, user_id, context):
     except Exception:
         msg = await context.bot.send_message(query.message.chat_id, text, reply_markup=reply_markup)
     track_message(user_id, msg.message_id)
+
 
 # === Сигналы (требуют верификации) ===
 async def send_signal_1(query, user_id, context):
@@ -385,24 +393,16 @@ async def send_signal_1(query, user_id, context):
     )
     keyboard = [[InlineKeyboardButton("✅ Сигнал сработал, перейти ко 2", callback_data='signal1_success')]]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    if os.path.exists(photo_path):
-        with open(photo_path, "rb") as photo:
-            msg = await context.bot.send_photo(
-                chat_id=query.message.chat_id,
-                photo=photo,
-                caption=text,
-                parse_mode="HTML",
-                reply_markup=reply_markup
-            )
-    else:
-        msg = await context.bot.send_message(
+    with open(photo_path, "rb") as photo:
+        msg = await context.bot.send_photo(
             chat_id=query.message.chat_id,
-            text=text,
+            photo=photo,
+            caption=text,
             parse_mode="HTML",
             reply_markup=reply_markup
         )
     track_message(user_id, msg.message_id)
+
 
 async def send_signal_2(query, user_id, context):
     await delete_all_messages(query.message.chat_id, user_id, context.bot)
@@ -416,24 +416,16 @@ async def send_signal_2(query, user_id, context):
     )
     keyboard = [[InlineKeyboardButton("➡️ Перейти к 3 сигналу", callback_data='signal2_next')]]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    if os.path.exists(photo_path):
-        with open(photo_path, "rb") as photo:
-            msg = await context.bot.send_photo(
-                chat_id=query.message.chat_id,
-                photo=photo,
-                caption=text,
-                parse_mode="HTML",
-                reply_markup=reply_markup
-            )
-    else:
-        msg = await context.bot.send_message(
+    with open(photo_path, "rb") as photo:
+        msg = await context.bot.send_photo(
             chat_id=query.message.chat_id,
-            text=text,
+            photo=photo,
+            caption=text,
             parse_mode="HTML",
             reply_markup=reply_markup
         )
     track_message(user_id, msg.message_id)
+
 
 async def send_signal_3(query, user_id, context):
     await delete_all_messages(query.message.chat_id, user_id, context.bot)
@@ -447,30 +439,23 @@ async def send_signal_3(query, user_id, context):
     )
     keyboard = [[InlineKeyboardButton("🔄 Получить новые сигналы", callback_data='new_signals')]]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    if os.path.exists(photo_path):
-        with open(photo_path, "rb") as photo:
-            msg = await context.bot.send_photo(
-                chat_id=query.message.chat_id,
-                photo=photo,
-                caption=text,
-                parse_mode="HTML",
-                reply_markup=reply_markup
-            )
-    else:
-        msg = await context.bot.send_message(
+    with open(photo_path, "rb") as photo:
+        msg = await context.bot.send_photo(
             chat_id=query.message.chat_id,
-            text=text,
+            photo=photo,
+            caption=text,
             parse_mode="HTML",
             reply_markup=reply_markup
         )
     track_message(user_id, msg.message_id)
+
 
 async def show_timer_and_reset(query, user_id, context):
     text = "⏳ Новые сигналы будут доступны через 30 минут."
     keyboard = [[InlineKeyboardButton("⬅️ Вернуться в меню", callback_data='back_to_start')]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await query.edit_message_text(text, reply_markup=reply_markup)
+
 
 # === Рассылка ===
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -508,6 +493,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Обычные пользователи - верификация
     await handle_verification_media(update, context)
 
+
 # === Запуск ===
 def main():
     app = Application.builder().token(BOT_TOKEN).build()
@@ -517,6 +503,7 @@ def main():
     app.add_handler(MessageHandler(filters.PHOTO, handle_verification_media))
     logger.info("🤖 Бот запущен и готов к работе!")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
+
 
 if __name__ == "__main__":
     main()
