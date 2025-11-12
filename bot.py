@@ -59,7 +59,7 @@ def track_message(user_id, message_id):
     if user_id == OWNER_ID and user_id not in panel_shown:
         await bot.send_message(
             chat_id=chat_id,
-@@ -118,7 +116,8 @@
+@@ -118,7 +116,8 @@{
         'subscribed': False,
         'signal_count': 0,
         'deposit_made': False,
@@ -381,3 +381,4 @@ if __name__ == "__main__":
     main()
 
     main()
+
