@@ -9,13 +9,10 @@ from telegram.ext import (
 )
 from datetime import datetime
 import os
+from dotenv import load_dotenv
 
-# === Загрузка .env (если файл есть) ===
-try:
-    from dotenv import load_dotenv
-    load_dotenv()
-except Exception:
-    pass  # если dotenv нет — просто пропускаем
+# === Загрузка .env ===
+load_dotenv()
 
 # === Настройка логов ===
 logging.basicConfig(
@@ -25,24 +22,24 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # === Переменные окружения ===
-BOT_TOKEN = os.getenv("BOT_TOKEN") or os.environ.get("BOT_TOKEN")
-REGISTRATION_URL = os.getenv("REGISTRATION_URL") or os.environ.get("REGISTRATION_URL")
-HELP_CONTACT = os.getenv("HELP_CONTACT") or os.environ.get("HELP_CONTACT")
-CHANNEL_USERNAME = os.getenv("CHANNEL_USERNAME") or os.environ.get("CHANNEL_USERNAME")
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+REGISTRATION_URL = os.getenv("REGISTRATION_URL")
+HELP_CONTACT = os.getenv("HELP_CONTACT")
+CHANNEL_USERNAME = os.getenv("CHANNEL_USERNAME")
 PROMO_CODE = os.getenv("PROMO_CODE", "CXEMA4MINES")
 TELEGRAPH_URL = os.getenv("TELEGRAPH_URL", "https://telegra.ph/Kak-vyjti-iz-starogo-akkaunta-11-11-2")
 
 OWNER_ID = 1253708269  # ✅ твой Telegram ID
 
 if not BOT_TOKEN:
-    logger.error("❌ BOT_TOKEN не найден! Проверь переменные окружения на Railway или .env файл.")
-    raise SystemExit
+    raise ValueError("❌ BOT_TOKEN не найден в .env!")
 
 # === Хранилища ===
 user_data = {}
 user_messages = {}
 broadcast_mode = {}
 panel_shown = set()
+
 
 # === Вспомогательные функции ===
 def track_message(user_id, message_id):
@@ -133,6 +130,28 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user_id = query.from_user.id
 
+    # === Проверка кнопок админа (подтверждение заявки) ===
+    if query.data.startswith("approve_") or query.data.startswith("reject_"):
+        target_id = int(query.data.split("_")[1])
+
+        if query.data.startswith("approve_"):
+            await context.bot.send_message(
+                chat_id=target_id,
+                text="✅ Ваш аккаунт подтверждён!\n\n"
+                     "Теперь подпишитесь на канал, чтобы получить первый сигнал 👇"
+            )
+            await handle_registered_fake(target_id, context)
+            await query.edit_message_caption(caption="✅ Заявка подтверждена!", reply_markup=None)
+
+        else:
+            await context.bot.send_message(
+                chat_id=target_id,
+                text="❌ Просим прощения, но вашу заявку отклонили. Хорошего дня!"
+            )
+            await query.edit_message_caption(caption="❌ Заявка отклонена!", reply_markup=None)
+        return
+
+    # === Остальные кнопки ===
     if query.data == 'register':
         await handle_registration(query, user_id, context)
     elif query.data == 'registered':
@@ -171,11 +190,65 @@ async def handle_registration(query, user_id, context):
     track_message(user_id, msg.message_id)
 
 
-# === После регистрации ===
+# === После регистрации (отправка скрина и ID) ===
 async def handle_registered(query, user_id, context):
     user_data[user_id]['registered'] = True
+
     text = (
-        "✅ <b>Ваш аккаунт успешно синхронизирован с ботом!</b>\n\n"
+        "📸 Пожалуйста, отправьте скриншот страницы регистрации 1Win "
+        "и укажите ваш ID 1Win, чтобы мы могли подтвердить ваш аккаунт.\n\n"
+        "❗ Пример: пришлите фото и подпишите сообщение так:\n"
+        "<code>ID: 12345678</code>"
+    )
+
+    await query.edit_message_text(text, parse_mode="HTML")
+    user_data[user_id]['awaiting_verification'] = True
+
+
+# === Обработка сообщений с фото и ID ===
+async def handle_verification(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+
+    if not user_data.get(user_id, {}).get('awaiting_verification'):
+        return
+
+    if not update.message.photo:
+        await update.message.reply_text("📸 Пожалуйста, отправьте скриншот страницы регистрации с вашим ID.")
+        return
+
+    caption = update.message.caption or update.message.text or "Без подписи"
+    username = update.effective_user.username or "Без ника"
+    photo = update.message.photo[-1].file_id
+
+    keyboard = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("✅ Подтвердить", callback_data=f"approve_{user_id}"),
+            InlineKeyboardButton("❌ Отклонить", callback_data=f"reject_{user_id}")
+        ]
+    ])
+
+    await context.bot.send_photo(
+        chat_id=OWNER_ID,
+        photo=photo,
+        caption=(
+            f"📩 Новая заявка на подтверждение!\n\n"
+            f"👤 <b>Игрок:</b> @{username}\n"
+            f"🆔 <b>ID:</b> {user_id}\n"
+            f"💬 <b>Сообщение:</b> {caption}"
+        ),
+        parse_mode="HTML",
+        reply_markup=keyboard
+    )
+
+    await update.message.reply_text("✅ Принято! Ожидайте одобрения администрации.")
+    user_data[user_id]['awaiting_verification'] = False
+    user_data[user_id]['pending_approval'] = True
+
+
+# === После подтверждения ===
+async def handle_registered_fake(user_id, context):
+    text = (
+        "✅ <b>Ваш аккаунт успешно подтверждён!</b>\n\n"
         "Для получения первого сигнала подпишитесь на наш Telegram-канал 👇"
     )
     keyboard = [
@@ -184,8 +257,7 @@ async def handle_registered(query, user_id, context):
         [InlineKeyboardButton("⬅️ Назад", callback_data='back_to_start')]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    msg = await query.edit_message_text(text, reply_markup=reply_markup, parse_mode="HTML")
-    track_message(user_id, msg.message_id)
+    await context.bot.send_message(chat_id=user_id, text=text, parse_mode="HTML", reply_markup=reply_markup)
 
 
 # === Инструкция ===
@@ -331,6 +403,7 @@ def main():
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(button_handler))
+    app.add_handler(MessageHandler(filters.PHOTO, handle_verification))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
     logger.info("🤖 Бот запущен и готов к работе!")
