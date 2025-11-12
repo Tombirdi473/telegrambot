@@ -29,7 +29,11 @@ CHANNEL_USERNAME = os.getenv("CHANNEL_USERNAME")
 PROMO_CODE = os.getenv("PROMO_CODE", "CXEMA4MINES")
 TELEGRAPH_URL = os.getenv("TELEGRAPH_URL", "https://telegra.ph/Kak-vyjti-iz-starogo-akkaunta-11-11-2")
 
-OWNER_ID = int(os.getenv("OWNER_ID", "1253708269"))
+# OWNER_ID обязательно как int
+try:
+    OWNER_ID = int(os.getenv("OWNER_ID"))
+except (TypeError, ValueError):
+    raise ValueError("❌ OWNER_ID не найден или неверный формат. Укажи число в Railway Variables.")
 
 if not BOT_TOKEN:
     logger.error("❌ BOT_TOKEN не найден! Проверь переменные окружения на Railway или .env файл.")
@@ -40,7 +44,6 @@ user_data = {}
 user_messages = {}
 broadcast_mode = {}
 panel_shown = set()
-
 
 # === Вспомогательные функции ===
 def track_message(user_id, message_id):
@@ -81,11 +84,13 @@ async def show_main_menu(chat_id, user_id, bot):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
+    # Проверяем: это владелец?
     if user_id == OWNER_ID:
         reply_keyboard = ReplyKeyboardMarkup(
             [[KeyboardButton("📢 Сделать рассылку")]],
             resize_keyboard=True
         )
+        text += "\n\n👑 <b>Вы вошли как владелец.</b>"
     else:
         reply_keyboard = ReplyKeyboardRemove()
 
@@ -97,6 +102,7 @@ async def show_main_menu(chat_id, user_id, bot):
     )
     track_message(user_id, message.message_id)
 
+    # Только владельцу — включаем панель один раз
     if user_id == OWNER_ID and user_id not in panel_shown:
         await bot.send_message(
             chat_id=chat_id,
