@@ -31,6 +31,7 @@ try:
     OWNER_ID = int(os.getenv("OWNER_ID"))
 except (TypeError, ValueError):
     raise ValueError("❌ OWNER_ID не найден или неверный формат. Укажи число в Railway Variables.")
+    print(f"OWNER_ID = {OWNER_ID}")
 
 if not BOT_TOKEN:
     logger.error("❌ BOT_TOKEN не найден! Проверь переменные окружения на Railway или .env файл.")
