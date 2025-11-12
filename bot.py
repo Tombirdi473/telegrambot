@@ -9,10 +9,13 @@ from telegram.ext import (
 )
 from datetime import datetime
 import os
-from dotenv import load_dotenv
 
-# === Загрузка .env ===
-load_dotenv()
+# === Загрузка .env (если файл есть) ===
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except Exception:
+    pass  # если dotenv нет — просто пропускаем
 
 # === Настройка логов ===
 logging.basicConfig(
@@ -22,23 +25,24 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # === Переменные окружения ===
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-REGISTRATION_URL = os.getenv("REGISTRATION_URL")
-HELP_CONTACT = os.getenv("HELP_CONTACT")
-CHANNEL_USERNAME = os.getenv("CHANNEL_USERNAME")
+BOT_TOKEN = os.getenv("BOT_TOKEN") or os.environ.get("BOT_TOKEN")
+REGISTRATION_URL = os.getenv("REGISTRATION_URL") or os.environ.get("REGISTRATION_URL")
+HELP_CONTACT = os.getenv("HELP_CONTACT") or os.environ.get("HELP_CONTACT")
+CHANNEL_USERNAME = os.getenv("CHANNEL_USERNAME") or os.environ.get("CHANNEL_USERNAME")
 PROMO_CODE = os.getenv("PROMO_CODE", "CXEMA4MINES")
 TELEGRAPH_URL = os.getenv("TELEGRAPH_URL", "https://telegra.ph/Kak-vyjti-iz-starogo-akkaunta-11-11-2")
 
 OWNER_ID = 1253708269  # ✅ твой Telegram ID
 
 if not BOT_TOKEN:
-    raise ValueError("❌ BOT_TOKEN не найден в .env!")
+    logger.error("❌ BOT_TOKEN не найден! Проверь переменные окружения на Railway или .env файл.")
+    raise SystemExit
 
 # === Хранилища ===
 user_data = {}
 user_messages = {}
 broadcast_mode = {}
-panel_shown = set() 
+panel_shown = set()
 
 # === Вспомогательные функции ===
 def track_message(user_id, message_id):
@@ -125,7 +129,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         await query.answer()
     except Exception:
-        return  
+        return
 
     user_id = query.from_user.id
 
@@ -200,7 +204,7 @@ async def show_exit_instruction(query, user_id, context):
 async def send_signal_1(query, user_id, context):
     await delete_all_messages(query.message.chat_id, user_id, context.bot)
 
-    photo_path = os.path.join(os.getcwd(), "signal1.png") 
+    photo_path = os.path.join(os.getcwd(), "signal1.png")
     text = (
         "✅ Отлично! Вот ваш первый сигнал 1W MINES!\n\n"
         "💣 КОЛ-ВО МИН: 2\n\n"
@@ -237,7 +241,7 @@ async def show_deposit_request(query, user_id, context):
 async def send_signal_2(query, user_id, context):
     await delete_all_messages(query.message.chat_id, user_id, context.bot)
 
-    photo_path = os.path.join(os.getcwd(), "signal2.png")  
+    photo_path = os.path.join(os.getcwd(), "signal2.png")
     text = (
         "2️⃣ <b>2-ой сигнал успешно получен!</b>\n\n"
         "💣 КОЛ-ВО МИН: 2\n\n"
@@ -263,7 +267,7 @@ async def send_signal_2(query, user_id, context):
 async def send_signal_3(query, user_id, context):
     await delete_all_messages(query.message.chat_id, user_id, context.bot)
 
-    photo_path = os.path.join(os.getcwd(), "signal3.png")  
+    photo_path = os.path.join(os.getcwd(), "signal3.png")
     text = (
         "3️⃣ <b>ТРЕТИЙ СИГНАЛ</b>\n\n"
         "💣 КОЛ-ВО МИН: 2\n\n"
