@@ -495,7 +495,7 @@ async def broadcast_entry(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     broadcast_mode[user_id] = True
     await update.message.reply_text(
-        "📢 Введите текст для рассылки всем пользователям.\n\n"
+        "📢 Введите текст или отправьте фото с подписью для рассылки всем пользователям.\n\n"
         "Отправьте /cancel для отмены."
     )
 
@@ -505,16 +505,35 @@ async def broadcast_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not broadcast_mode.get(user_id):
         return
 
-    text = update.message.text
     count = 0
     failed = 0
 
-    for uid in user_data.keys():
-        try:
-            await context.bot.send_message(chat_id=uid, text=text, parse_mode="HTML")
-            count += 1
-        except Exception:
-            failed += 1
+    # Если отправлено фото с подписью
+    if update.message.photo:
+        photo_id = update.message.photo[-1].file_id
+        caption = update.message.caption or ""
+        
+        for uid in user_data.keys():
+            try:
+                await context.bot.send_photo(chat_id=uid, photo=photo_id, caption=caption, parse_mode="HTML")
+                count += 1
+            except Exception:
+                failed += 1
+    
+    # Если отправлен только текст
+    elif update.message.text:
+        text = update.message.text
+        
+        for uid in user_data.keys():
+            try:
+                await context.bot.send_message(chat_id=uid, text=text, parse_mode="HTML")
+                count += 1
+            except Exception:
+                failed += 1
+    
+    else:
+        await update.message.reply_text("❌ Отправьте текст или фото с подписью.")
+        return
 
     broadcast_mode[user_id] = False
     await update.message.reply_text(f"✅ Рассылка завершена!\n📨 Успешно: {count}\n❌ Ошибок: {failed}")
@@ -540,7 +559,7 @@ def main():
     # Панель владельца - ВАЖНО: эти handlers должны быть РАНЬШЕ verification
     app.add_handler(MessageHandler(filters.Regex("^📢 Сделать рассылку$"), broadcast_entry))
     app.add_handler(MessageHandler(
-        filters.TEXT & (~filters.COMMAND) & filters.User(user_id=OWNER_ID),
+        (filters.TEXT | filters.PHOTO) & (~filters.COMMAND) & filters.User(user_id=OWNER_ID),
         broadcast_message
     ))
     
