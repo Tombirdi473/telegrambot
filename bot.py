@@ -534,13 +534,18 @@ def main():
     app = Application.builder().token(BOT_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CallbackQueryHandler(button_handler))
-    app.add_handler(MessageHandler(filters.PHOTO | filters.TEXT, handle_verification_media))
-
-    # Панель владельца
-    app.add_handler(MessageHandler(filters.Regex("^📢 Сделать рассылку$"), broadcast_entry))
     app.add_handler(CommandHandler("cancel", cancel_broadcast))
-    app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), broadcast_message))
+    app.add_handler(CallbackQueryHandler(button_handler))
+    
+    # Панель владельца - ВАЖНО: эти handlers должны быть РАНЬШЕ verification
+    app.add_handler(MessageHandler(filters.Regex("^📢 Сделать рассылку$"), broadcast_entry))
+    app.add_handler(MessageHandler(
+        filters.TEXT & (~filters.COMMAND) & filters.User(user_id=OWNER_ID),
+        broadcast_message
+    ))
+    
+    # Верификация - должна быть ПОСЛЕ handlers владельца
+    app.add_handler(MessageHandler(filters.PHOTO | filters.TEXT, handle_verification_media))
 
     logger.info("✅ Бот запущен и готов к работе!")
     app.run_polling()
@@ -548,4 +553,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
